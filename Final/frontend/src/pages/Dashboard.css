@@ -1,0 +1,124 @@
+body{
+  margin:0;
+  background:#f4f6f8;
+  font-family:Segoe UI,sans-serif;
+}
+
+.dashboard{
+  padding:30px;
+}
+
+.title{
+  margin-bottom:25px;
+}
+
+.title h1{
+  font-size:42px;
+  margin:0;
+}
+
+.metrics{
+  display:grid;
+
+  grid-template-columns:
+  repeat(auto-fit,minmax(260px,1fr));
+
+  gap:15px;
+}
+
+.metric-card{
+  background:white;
+
+  border-radius:16px;
+
+  padding:20px;
+
+  display:flex;
+
+  align-items:center;
+
+  gap:15px;
+
+  box-shadow:
+  0 4px 10px rgba(0,0,0,0.08);
+}
+
+.metric-card h4{
+  margin:0;
+  color:#666;
+}
+
+.metric-card h2{
+  margin-top:8px;
+  margin-bottom:0;
+}
+
+.icon{
+  font-size:38px;
+}
+
+.blue{
+  color:#2979ff;
+}
+
+.green{
+  color:#00a152;
+}
+
+.red{
+  color:#e53935;
+}
+
+.orange{
+  color:#fb8c00;
+}
+
+.purple{
+  color:#8e24aa;
+}
+
+.bottom-row{
+
+  margin-top:25px;
+
+  display:grid;
+
+  grid-template-columns:
+  repeat(3,1fr);
+
+  gap:20px;
+}
+
+.status-card{
+
+  background:white;
+
+  border-radius:18px;
+
+  padding:25px;
+
+  text-align:center;
+
+  box-shadow:
+  0 4px 10px rgba(0,0,0,0.08);
+}
+
+.status-icon{
+
+  font-size:50px;
+
+  margin-bottom:15px;
+}
+
+.status-card h2{
+
+  margin-top:10px;
+}
+
+@media(max-width:900px){
+
+  .bottom-row{
+
+    grid-template-columns:1fr;
+  }
+}
