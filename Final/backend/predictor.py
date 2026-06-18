@@ -109,30 +109,12 @@ def predict_fault(
     )[0]
 
     # ---------------------------------
-    # Rule-Based Overrides
+    # Safety Overrides (extreme only)
+    # XGBoost classifies everything else
     # ---------------------------------
 
-    if vibration >= 0.70:
+    if vibration >= 0.70 or estimated_temperature >= 80:
         fault_type = "Critical"
-
-    elif vibration >= 0.40:
-        fault_type = "Bearing_Wear"
-
-    elif estimated_temperature >= 80:
-        fault_type = "Critical"
-
-    elif estimated_temperature >= 65:
-        fault_type = "Overheating_Risk"
-
-    elif current >= 0.45:
-        fault_type = "Overloaded"
-
-    elif (
-        vibration < 0.35
-        and current < 0.30
-        and rpm_drop_percent < 25
-    ):
-        fault_type = "Normal"
 
     # ---------------------------------
     # Maintenance Logic
@@ -142,12 +124,7 @@ def predict_fault(
         "YES"
         if (
             failure_probability > 40
-            or fault_type in [
-                "Overloaded",
-                "Bearing_Wear",
-                "Overheating_Risk",
-                "Critical"
-            ]
+            or vibration_level == "CRITICAL"
         )
         else "NO"
     )

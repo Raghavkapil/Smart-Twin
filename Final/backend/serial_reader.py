@@ -1,73 +1,51 @@
-import serial
+import requests
 import threading
+import time
 
-# Latest values from ESP32
+# Set this to the IP printed by the ESP32 in the Serial Monitor at startup
+ESP32_IP = "10.255.113.165"
 
-latest_rpm_reduction = 0.0
-latest_current = 0.0
-latest_temperature = 0.0
-latest_humidity = 0.0
-latest_vibration = 0.0
-latest_vibration_level = "NONE"
+POLL_INTERVAL = 0.5   # seconds between polls
 
-try:
-    ser = serial.Serial(
-        "COM3",
-        115200,
-        timeout=1
-    )
-
-    print("ESP32 connected on COM3")
-
-except Exception as e:
-
-    print("Serial Error:", e)
-    ser = None
+latest_rpm_reduction    = 0.0
+latest_current          = 0.0
+latest_temperature      = 0.0
+latest_humidity         = 0.0
+latest_vibration        = 0.0
+latest_vibration_level  = "NONE"
 
 
-def serial_worker():
+def wifi_worker():
 
-    global latest_rpm_reduction
-    global latest_current
-    global latest_temperature
-    global latest_humidity
-    global latest_vibration
-    global latest_vibration_level
+    global latest_rpm_reduction, latest_current
+    global latest_temperature, latest_humidity
+    global latest_vibration, latest_vibration_level
+
+    url = f"http://{ESP32_IP}/data"
 
     while True:
 
         try:
 
-            if ser is None:
-                continue
+            r    = requests.get(url, timeout=2)
+            data = r.json()
 
-            line = (
-                ser.readline()
-                .decode(errors="ignore")
-                .strip()
-            )
-
-            if not line:
-                continue
-
-            parts = line.split(",")
-
-            if len(parts) == 6:
-
-                latest_rpm_reduction = float(parts[0])
-                latest_current = float(parts[1])
-                latest_temperature = float(parts[2])
-                latest_humidity = float(parts[3])
-                latest_vibration = float(parts[4])
-                latest_vibration_level = parts[5]
+            latest_rpm_reduction   = float(data["speed_percent"])
+            latest_current         = float(data["current"])
+            latest_temperature     = float(data["temperature"])
+            latest_humidity        = float(data["humidity"])
+            latest_vibration       = float(data["vibration"])
+            latest_vibration_level = str(data["vib_level"])
 
         except Exception as e:
 
-            print("Serial Error:", e)
+            print("WiFi Error:", e)
+
+        time.sleep(POLL_INTERVAL)
 
 
 threading.Thread(
-    target=serial_worker,
+    target=wifi_worker,
     daemon=True
 ).start()
 
@@ -75,21 +53,10 @@ threading.Thread(
 def get_motor_data():
 
     return {
-        "rpm_reduction_percent":
-            latest_rpm_reduction,
-
-        "current":
-            latest_current,
-
-        "ambient_temperature":
-            latest_temperature,
-
-        "ambient_humidity":
-            latest_humidity,
-
-        "vibration":
-            latest_vibration,
-
-        "vibration_level":
-            latest_vibration_level
+        "rpm_reduction_percent": latest_rpm_reduction,
+        "current":               latest_current,
+        "ambient_temperature":   latest_temperature,
+        "ambient_humidity":      latest_humidity,
+        "vibration":             latest_vibration,
+        "vibration_level":       latest_vibration_level,
     }
