@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import {
@@ -44,28 +44,33 @@ const FAULT_META = {
   Critical:         { cls: "bg-red-500/10      border-red-500/30     text-red-400",      sub: "Immediate action required"  },
 };
 
-const CHARTS = ["RPM Trend", "Current Consumption", "Temperature", "Vibration"];
+const MAX_HISTORY = 40;
 
 // ─── Main component ────────────────────────────────────────
 
 function Dashboard() {
-  const [motor, setMotor]           = useState(null);
+  const [motor, setMotor]             = useState(null);
+  const [history, setHistory]         = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [error, setError]           = useState(false);
+  const [error, setError]             = useState(false);
 
   useEffect(() => {
-    const fetch = async () => {
+    const fetchData = async () => {
       try {
         const res = await axios.get("http://127.0.0.1:8000/api/motor");
         setMotor(res.data);
+        setHistory((prev) => {
+          const next = [...prev, res.data];
+          return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
+        });
         setLastUpdated(new Date());
         setError(false);
       } catch {
         setError(true);
       }
     };
-    fetch();
-    const id = setInterval(fetch, 1000);
+    fetchData();
+    const id = setInterval(fetchData, 1000);
     return () => clearInterval(id);
   }, []);
 
@@ -101,7 +106,9 @@ function Dashboard() {
 
           <div className="flex items-center gap-3">
             {error ? (
-              <Pill color="red" label="Disconnected" />
+              <Pill color="red" label="Backend Offline" />
+            ) : motor?.esp_connected === false ? (
+              <Pill color="amber" label="ESP Offline" />
             ) : (
               <Pill color="green" label="Live" pulse />
             )}
@@ -118,6 +125,17 @@ function Dashboard() {
           <LoadingState />
         ) : (
           <>
+            {/* ESP offline banner */}
+            {motor.esp_connected === false && (
+              <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/25 rounded-xl px-5 py-3 mb-8 text-sm">
+                <FaExclamationTriangle className="text-amber-400 shrink-0" />
+                <div>
+                  <span className="text-amber-300 font-semibold">ESP32 not responding</span>
+                  <span className="text-amber-500 ml-2">— no data received in the last 3 seconds. Showing last known values.</span>
+                </div>
+              </div>
+            )}
+
             {/* Sensor Readings */}
             <Section title="Sensor Readings" />
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-10">
@@ -139,7 +157,7 @@ function Dashboard() {
               <FaultTypeCard   value={motor.fault_type}           />
               <FailureProbCard value={motor.failure_probability}  />
               <MaintenanceCard value={motor.maintenance}          />
-              <DigitalTwinCard />
+              <DigitalTwinCard espConnected={motor.esp_connected} />
             </div>
 
             {/* Connected Sensors */}
@@ -162,12 +180,54 @@ function Dashboard() {
               </div>
             </div>
 
-            {/* Charts */}
+            {/* Real-Time Charts */}
             <Section title="Real-Time Charts" />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              {CHARTS.map((c) => (
-                <ChartPlaceholder key={c} title={c} />
-              ))}
+              <RealtimeChart
+                title="RPM Trend"
+                icon={<FaTachometerAlt />}
+                iconColor="text-cyan-400"
+                unit="RPM"
+                current={motor.rpm_actual}
+                espConnected={motor.esp_connected}
+                series={[
+                  { label: "Actual RPM", color: "#22d3ee", data: history.map((h) => h.rpm_actual) },
+                ]}
+              />
+              <RealtimeChart
+                title="Current Consumption"
+                icon={<FaBolt />}
+                iconColor="text-orange-400"
+                unit="A"
+                current={motor.current}
+                espConnected={motor.esp_connected}
+                series={[
+                  { label: "Current", color: "#fb923c", data: history.map((h) => h.current) },
+                ]}
+              />
+              <RealtimeChart
+                title="Temperature"
+                icon={<FaThermometerHalf />}
+                iconColor="text-red-400"
+                unit="°C"
+                current={motor.estimated_temperature}
+                espConnected={motor.esp_connected}
+                series={[
+                  { label: "Ambient",    color: "#60a5fa", data: history.map((h) => h.ambient_temperature)   },
+                  { label: "Motor",      color: "#f87171", data: history.map((h) => h.estimated_temperature) },
+                ]}
+              />
+              <RealtimeChart
+                title="Vibration"
+                icon={<FaWaveSquare />}
+                iconColor="text-purple-400"
+                unit="g"
+                current={motor.vibration}
+                espConnected={motor.esp_connected}
+                series={[
+                  { label: "Vibration", color: "#c084fc", data: history.map((h) => h.vibration) },
+                ]}
+              />
             </div>
           </>
         )}
@@ -181,9 +241,10 @@ function Dashboard() {
 function Pill({ color, label, pulse }) {
   const map = {
     green: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
+    amber: "bg-amber-500/10  border-amber-500/20  text-amber-400",
     red:   "bg-red-500/10    border-red-500/20    text-red-400",
   };
-  const dot = { green: "bg-emerald-400", red: "bg-red-400" };
+  const dot = { green: "bg-emerald-400", amber: "bg-amber-400", red: "bg-red-400" };
   return (
     <div className={`flex items-center gap-2 border rounded-full px-4 py-2 ${map[color]}`}>
       <span className={`w-2 h-2 rounded-full block ${dot[color]} ${pulse ? "animate-pulse" : ""}`} />
@@ -286,38 +347,187 @@ function MaintenanceCard({ value }) {
   );
 }
 
-function DigitalTwinCard() {
+function DigitalTwinCard({ espConnected }) {
+  const online = espConnected !== false;
   return (
-    <div className="bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded-2xl p-6 text-center">
+    <div className={`border rounded-2xl p-6 text-center ${
+      online
+        ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
+        : "bg-amber-500/10 border-amber-500/30 text-amber-400"
+    }`}>
       <div className="flex justify-center text-3xl mb-3"><FaNetworkWired /></div>
       <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-2">Digital Twin</p>
-      <p className="text-2xl font-black mb-1">ONLINE</p>
-      <p className="text-slate-500 text-xs">Model synchronized</p>
+      <p className="text-2xl font-black mb-1">{online ? "ONLINE" : "ESP OFFLINE"}</p>
+      <p className="text-slate-500 text-xs">{online ? "Model synchronized" : "Awaiting ESP32 data"}</p>
     </div>
   );
 }
 
-function ChartPlaceholder({ title }) {
+/* ── Real-time chart wrapper ─────────────────────────────── */
+function RealtimeChart({ title, icon, iconColor, unit, current, espConnected, series }) {
+  const allData = series.flatMap((s) => s.data);
+  const min = allData.length ? Math.min(...allData) : 0;
+  const max = allData.length ? Math.max(...allData) : 0;
+
+  const display =
+    typeof current === "number"
+      ? current % 1 === 0
+        ? current
+        : current.toFixed(2)
+      : "—";
+
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+      {/* Header */}
       <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between">
-        <span className="text-slate-300 text-sm font-semibold">{title}</span>
-        <span className="text-xs bg-slate-800 text-slate-500 rounded-full px-2.5 py-0.5">
-          Coming Soon
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={iconColor}>{icon}</span>
+          <span className="text-slate-300 text-sm font-semibold">{title}</span>
+        </div>
+        {espConnected === false ? (
+          <div className="flex items-center gap-1.5 text-xs text-amber-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 block" />
+            STALE
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse block" />
+            LIVE
+          </div>
+        )}
       </div>
-      <div
-        className="h-44 flex flex-col items-center justify-center gap-2"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(148,163,184,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.03) 1px, transparent 1px)",
-          backgroundSize: "32px 32px",
-        }}
-      >
-        <FaChartLine className="text-slate-700 text-3xl" />
-        <p className="text-slate-600 text-xs">Real-time data coming soon</p>
+
+      {/* Value row */}
+      <div className="px-5 pt-4 pb-1 flex items-end justify-between">
+        <div>
+          <span className={`text-3xl font-black ${iconColor}`}>{display}</span>
+          <span className="text-slate-500 text-sm ml-1">{unit}</span>
+        </div>
+        <div className="text-right text-xs text-slate-600 space-y-0.5">
+          <div>H <span className="text-slate-400">{max % 1 === 0 ? max : max.toFixed(2)}</span></div>
+          <div>L <span className="text-slate-400">{min % 1 === 0 ? min : min.toFixed(2)}</span></div>
+        </div>
       </div>
+
+      {/* SVG chart */}
+      <div className="px-2 pb-3">
+        <SVGChart series={series} />
+      </div>
+
+      {/* Legend (only when multiple series) */}
+      {series.length > 1 && (
+        <div className="flex gap-4 px-5 pb-4">
+          {series.map((s) => (
+            <div key={s.label} className="flex items-center gap-1.5 text-xs text-slate-500">
+              <span className="w-3 h-0.5 rounded-full inline-block" style={{ backgroundColor: s.color }} />
+              {s.label}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+/* ── SVG line chart (no library) ─────────────────────────── */
+const VB_W = 500, VB_H = 150;
+const PAD  = { t: 12, r: 12, b: 24, l: 40 };
+const IW   = VB_W - PAD.l - PAD.r;
+const IH   = VB_H - PAD.t - PAD.b;
+
+function SVGChart({ series }) {
+  const uid = useId();
+  const allVals = series.flatMap((s) => s.data).filter((v) => v != null);
+
+  if (allVals.length < 2) {
+    return (
+      <div className="h-36 flex items-center justify-center text-slate-700 text-xs">
+        Collecting data…
+      </div>
+    );
+  }
+
+  const rawMin = Math.min(...allVals);
+  const rawMax = Math.max(...allVals);
+  const pad    = (rawMax - rawMin) * 0.15 || 0.5;
+  const yMin   = rawMin - pad;
+  const yMax   = rawMax + pad;
+  const yRange = yMax - yMin;
+
+  const toX = (i, n) => PAD.l + (i / Math.max(n - 1, 1)) * IW;
+  const toY = (v)    => PAD.t + ((yMax - v) / yRange) * IH;
+
+  const GRID = 4;
+
+  return (
+    <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="w-full" style={{ height: VB_H }}>
+      <defs>
+        {series.map((s, si) => (
+          <linearGradient key={si} id={`${uid}-g${si}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor={s.color} stopOpacity="0.28" />
+            <stop offset="100%" stopColor={s.color} stopOpacity="0"    />
+          </linearGradient>
+        ))}
+      </defs>
+
+      {/* Horizontal grid lines + Y labels */}
+      {Array.from({ length: GRID + 1 }, (_, i) => {
+        const y = PAD.t + (i / GRID) * IH;
+        const v = yMax  - (i / GRID) * yRange;
+        const label = Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1);
+        return (
+          <g key={i}>
+            <line
+              x1={PAD.l} y1={y} x2={VB_W - PAD.r} y2={y}
+              stroke="rgba(148,163,184,0.07)" strokeWidth="1"
+            />
+            <text
+              x={PAD.l - 5} y={y + 3.5}
+              textAnchor="end" fontSize="9" fill="rgba(148,163,184,0.35)"
+            >
+              {label}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Bottom axis */}
+      <line
+        x1={PAD.l} y1={VB_H - PAD.b} x2={VB_W - PAD.r} y2={VB_H - PAD.b}
+        stroke="rgba(148,163,184,0.12)" strokeWidth="1"
+      />
+
+      {/* Series */}
+      {series.map((s, si) => {
+        const { data, color } = s;
+        if (data.length < 2) return null;
+        const n = data.length;
+
+        const linePts = data.map((v, i) => `${toX(i, n)},${toY(v)}`).join(" ");
+        const areaPts = [
+          `${toX(0, n)},${VB_H - PAD.b}`,
+          ...data.map((v, i) => `${toX(i, n)},${toY(v)}`),
+          `${toX(n - 1, n)},${VB_H - PAD.b}`,
+        ].join(" ");
+
+        const lx = toX(n - 1, n);
+        const ly = toY(data[n - 1]);
+
+        return (
+          <g key={si}>
+            <polygon points={areaPts} fill={`url(#${uid}-g${si})`} />
+            <polyline
+              points={linePts}
+              fill="none" stroke={color} strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round"
+            />
+            {/* Animated pulse on latest point */}
+            <circle cx={lx} cy={ly} r="5" fill={color} fillOpacity="0.18" />
+            <circle cx={lx} cy={ly} r="3" fill={color} />
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 
