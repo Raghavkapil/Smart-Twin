@@ -3,6 +3,8 @@ import { FaCog } from "react-icons/fa";
 
 const NAV_LINKS = [
   { label: "Home",            path: "/" },
+  { label: "History",         path: "/history" },
+  { label: "Model",           path: "/model" },
   { label: "Edit Components", path: "/edit" },
   { label: "About Us",        path: "/about" },
   { label: "Contact Us",      path: "/contact" },

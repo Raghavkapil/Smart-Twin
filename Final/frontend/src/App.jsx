@@ -3,6 +3,8 @@ import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import About from "./pages/About";
 import EditComponents from "./pages/EditComponents";
+import History from "./pages/History";
+import ModelResults from "./pages/ModelResults";
 
 function App() {
   return (
@@ -12,6 +14,8 @@ function App() {
         <Route path="/dashboard/motor" element={<Dashboard />}        />
         <Route path="/about"           element={<About />}            />
         <Route path="/edit"            element={<EditComponents />}   />
+        <Route path="/history"         element={<History />}          />
+        <Route path="/model"           element={<ModelResults />}     />
       </Routes>
     </BrowserRouter>
   );
