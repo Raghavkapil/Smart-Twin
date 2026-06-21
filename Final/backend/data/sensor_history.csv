@@ -1,0 +1,1 @@
+timestamp,rpm_reduction_percent,rpm_actual,current,expected_current,current_deviation_percent,efficiency_index,ambient_temperature,ambient_humidity,estimated_temperature,vibration,vibration_level,health_score,fault_type,failure_probability,maintenance

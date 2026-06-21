@@ -7,7 +7,6 @@ POLL_INTERVAL = 0.5   # seconds between polls
 ESP_TIMEOUT   = 3.0   # seconds without fresh data → consider offline
 
 _lock = threading.Lock()
-
 _data = {
     "rpm_reduction_percent": 0.0,
     "current":               0.0,
