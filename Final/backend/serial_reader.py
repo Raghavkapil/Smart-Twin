@@ -2,9 +2,9 @@ import requests
 import threading
 import time
 
-ESP32_IP      = "10.255.113.165"
+ESP32_IP = "10.255.113.165"
 POLL_INTERVAL = 0.5   # seconds between polls
-ESP_TIMEOUT   = 3.0   # seconds without fresh data → consider offline
+ESP_TIMEOUT = 3.0   # seconds without fresh data → consider offline
 
 _lock = threading.Lock()
 _data = {
@@ -25,17 +25,17 @@ def wifi_worker():
 
     while True:
         try:
-            r    = requests.get(url, timeout=2)
+            r = requests.get(url, timeout=2)
             data = r.json()
 
             with _lock:
                 _data["rpm_reduction_percent"] = float(data["speed_percent"])
-                _data["current"]               = float(data["current"])
-                _data["ambient_temperature"]   = float(data["temperature"])
-                _data["ambient_humidity"]       = float(data["humidity"])
-                _data["vibration"]             = float(data["vibration"])
-                _data["vibration_level"]       = str(data["vib_level"])
-                _last_data_time                = time.monotonic()
+                _data["current"] = float(data["current"])
+                _data["ambient_temperature"] = float(data["temperature"])
+                _data["ambient_humidity"] = float(data["humidity"])
+                _data["vibration"] = float(data["vibration"])
+                _data["vibration_level"] = str(data["vib_level"])
+                _last_data_time = time.monotonic()
 
         except Exception as e:
             print("WiFi Error:", e)
@@ -48,7 +48,8 @@ threading.Thread(target=wifi_worker, daemon=True).start()
 
 def get_motor_data():
     with _lock:
-        age = (time.monotonic() - _last_data_time) if _last_data_time is not None else None
+        age = (time.monotonic() -
+               _last_data_time) if _last_data_time is not None else None
         esp_connected = age is not None and age < ESP_TIMEOUT
 
         return {

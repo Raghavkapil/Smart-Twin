@@ -1,0 +1,107 @@
+{
+  "trained_at": "2026-06-21 11:54:37",
+  "dataset": {
+    "original_rows": 1500,
+    "history_rows": 100,
+    "total_rows": 1600,
+    "train_rows": 1280,
+    "test_rows": 320
+  },
+  "classes": [
+    "Critical_Fault",
+    "Mechanical_Vibration",
+    "Normal",
+    "Overheating",
+    "Overload"
+  ],
+  "accuracy": 0.95,
+  "old_accuracy": null,
+  "macro_precision": 0.7122,
+  "macro_recall": 0.7006,
+  "macro_specificity": 0.97,
+  "macro_f1": 0.7052,
+  "per_class": {
+    "Critical_Fault": {
+      "precision": 0.9333,
+      "recall": 1.0,
+      "specificity": 0.9967,
+      "f1_score": 0.9655,
+      "support": 14
+    },
+    "Mechanical_Vibration": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "specificity": 1.0,
+      "f1_score": 0.0,
+      "support": 5
+    },
+    "Normal": {
+      "precision": 0.9603,
+      "recall": 0.9959,
+      "specificity": 0.8701,
+      "f1_score": 0.9778,
+      "support": 243
+    },
+    "Overheating": {
+      "precision": 0.6923,
+      "recall": 0.6,
+      "specificity": 0.9869,
+      "f1_score": 0.6429,
+      "support": 15
+    },
+    "Overload": {
+      "precision": 0.975,
+      "recall": 0.907,
+      "specificity": 0.9964,
+      "f1_score": 0.9398,
+      "support": 43
+    }
+  },
+  "confusion_matrix": [
+    [
+      14,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      1,
+      0,
+      3,
+      1,
+      0
+    ],
+    [
+      0,
+      0,
+      242,
+      1,
+      0
+    ],
+    [
+      0,
+      0,
+      5,
+      9,
+      1
+    ],
+    [
+      0,
+      0,
+      2,
+      2,
+      39
+    ]
+  ],
+  "feature_importances": {
+    "current": 0.2797,
+    "rpm_reduction_percent": 0.1933,
+    "rpm_actual": 0.1263,
+    "estimated_temperature": 0.1139,
+    "ambient_temperature": 0.098,
+    "health_score": 0.0706,
+    "vibration": 0.065,
+    "ambient_humidity": 0.0532
+  }
+}

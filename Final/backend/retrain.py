@@ -27,7 +27,7 @@ from xgboost import XGBClassifier
 
 # ── Paths ─────────────────────────────────────────────────────────
 BASE         = os.path.dirname(os.path.abspath(__file__))
-ORIG_CSV     = os.path.join(BASE, "..", "..", "Final_Dataset.csv")
+ORIG_CSV     = os.path.join(BASE, "..", "..", "Dataset.csv")
 HISTORY_CSV  = os.path.join(BASE, "data", "sensor_history.csv")
 MODEL_OUT    = os.path.join(BASE, "models", "digital_twin_xgboost_model.pkl")
 ENC_OUT      = os.path.join(BASE, "models", "fault_type_encoder.pkl")
