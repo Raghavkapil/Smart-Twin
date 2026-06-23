@@ -1,6 +1,8 @@
 import csv
 import json
 import os
+import time
+import threading
 from datetime import datetime
 from threading import Lock
 
@@ -41,6 +43,39 @@ def _append_row(data: dict):
         with open(CSV_PATH, "a", newline="") as f:
             w = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
             w.writerow(data)
+
+# ── Hourly auto-save ────────────────────────────────────────
+_autosave_state = {"last_time": None, "count": 0}
+_autosave_lock  = Lock()
+
+def _run_hourly_autosave():
+    """Background thread: records an auto-save checkpoint every hour."""
+    while True:
+        time.sleep(3600)
+        try:
+            sensor_data = get_motor_data()
+            if sensor_data.get("esp_connected"):
+                prediction = predict_fault(
+                    sensor_data["rpm_reduction_percent"],
+                    sensor_data["current"],
+                    sensor_data["ambient_temperature"],
+                    sensor_data["ambient_humidity"],
+                    sensor_data["vibration"],
+                    sensor_data["vibration_level"],
+                )
+                row = {
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    **sensor_data,
+                    **prediction,
+                }
+                _append_row(row)
+            with _autosave_lock:
+                _autosave_state["last_time"] = datetime.now().isoformat()
+                _autosave_state["count"] += 1
+        except Exception:
+            pass
+
+threading.Thread(target=_run_hourly_autosave, daemon=True).start()
 
 # ── Routes ───────────────────────────────────────────────────
 
@@ -106,6 +141,43 @@ def history_export():
         return ("No data yet", 404)
     return send_file(CSV_PATH, mimetype="text/csv",
                      as_attachment=True, download_name="sensor_history.csv")
+
+
+@app.route("/api/autosave", methods=["POST"])
+def autosave():
+    """Frontend-triggered hourly auto-save checkpoint."""
+    try:
+        sensor_data = get_motor_data()
+        if sensor_data.get("esp_connected"):
+            prediction = predict_fault(
+                sensor_data["rpm_reduction_percent"],
+                sensor_data["current"],
+                sensor_data["ambient_temperature"],
+                sensor_data["ambient_humidity"],
+                sensor_data["vibration"],
+                sensor_data["vibration_level"],
+            )
+            row = {
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                **sensor_data,
+                **prediction,
+            }
+            _append_row(row)
+        with _autosave_lock:
+            _autosave_state["last_time"] = datetime.now().isoformat()
+            _autosave_state["count"] += 1
+        return jsonify({"status": "ok", "last_time": _autosave_state["last_time"]})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/autosave-status")
+def autosave_status():
+    with _autosave_lock:
+        return jsonify({
+            "last_time": _autosave_state["last_time"],
+            "count":     _autosave_state["count"],
+        })
 
 
 if __name__ == "__main__":

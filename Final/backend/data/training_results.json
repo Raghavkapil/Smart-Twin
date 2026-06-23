@@ -1,107 +1,128 @@
 {
-  "trained_at": "2026-06-21 11:54:37",
+  "trained_at": "2026-06-23 12:23:20",
   "dataset": {
-    "original_rows": 1500,
-    "history_rows": 100,
-    "total_rows": 1600,
-    "train_rows": 1280,
-    "test_rows": 320
+    "original_rows": 4000,
+    "history_rows": 911,
+    "total_rows": 4911,
+    "train_rows": 3928,
+    "test_rows": 983
   },
   "classes": [
     "Critical_Fault",
     "Mechanical_Vibration",
     "Normal",
     "Overheating",
-    "Overload"
+    "Overload",
+    "Stopped_Idle"
   ],
-  "accuracy": 0.95,
+  "accuracy": 0.9491,
   "old_accuracy": null,
-  "macro_precision": 0.7122,
-  "macro_recall": 0.7006,
-  "macro_specificity": 0.97,
-  "macro_f1": 0.7052,
+  "macro_precision": 0.9297,
+  "macro_recall": 0.9007,
+  "macro_specificity": 0.9877,
+  "macro_f1": 0.9142,
   "per_class": {
     "Critical_Fault": {
-      "precision": 0.9333,
-      "recall": 1.0,
-      "specificity": 0.9967,
-      "f1_score": 0.9655,
-      "support": 14
+      "precision": 0.9545,
+      "recall": 0.8936,
+      "specificity": 0.9979,
+      "f1_score": 0.9231,
+      "support": 47
     },
     "Mechanical_Vibration": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "specificity": 1.0,
-      "f1_score": 0.0,
-      "support": 5
+      "precision": 0.9308,
+      "recall": 0.9237,
+      "specificity": 0.9894,
+      "f1_score": 0.9272,
+      "support": 131
     },
     "Normal": {
-      "precision": 0.9603,
-      "recall": 0.9959,
-      "specificity": 0.8701,
-      "f1_score": 0.9778,
-      "support": 243
+      "precision": 0.9729,
+      "recall": 0.9945,
+      "specificity": 0.966,
+      "f1_score": 0.9836,
+      "support": 542
     },
     "Overheating": {
-      "precision": 0.6923,
-      "recall": 0.6,
-      "specificity": 0.9869,
-      "f1_score": 0.6429,
-      "support": 15
+      "precision": 0.8824,
+      "recall": 0.7759,
+      "specificity": 0.9935,
+      "f1_score": 0.8257,
+      "support": 58
     },
     "Overload": {
-      "precision": 0.975,
-      "recall": 0.907,
-      "specificity": 0.9964,
-      "f1_score": 0.9398,
-      "support": 43
+      "precision": 0.8482,
+      "recall": 0.8879,
+      "specificity": 0.9806,
+      "f1_score": 0.8676,
+      "support": 107
+    },
+    "Stopped_Idle": {
+      "precision": 0.9891,
+      "recall": 0.9286,
+      "specificity": 0.9989,
+      "f1_score": 0.9579,
+      "support": 98
     }
   },
   "confusion_matrix": [
     [
-      14,
-      0,
-      0,
-      0,
-      0
-    ],
-    [
-      1,
+      42,
       0,
       3,
-      1,
+      0,
+      2,
       0
     ],
     [
       0,
-      0,
-      242,
-      1,
-      0
-    ],
-    [
-      0,
+      121,
+      4,
       0,
       5,
-      9,
       1
     ],
     [
       0,
+      1,
+      539,
+      1,
+      1,
+      0
+    ],
+    [
       0,
-      2,
-      2,
-      39
+      4,
+      1,
+      45,
+      8,
+      0
+    ],
+    [
+      1,
+      3,
+      3,
+      5,
+      95,
+      0
+    ],
+    [
+      1,
+      1,
+      4,
+      0,
+      1,
+      91
     ]
   ],
   "feature_importances": {
-    "current": 0.2797,
-    "rpm_reduction_percent": 0.1933,
-    "rpm_actual": 0.1263,
-    "estimated_temperature": 0.1139,
-    "ambient_temperature": 0.098,
-    "health_score": 0.0706,
-    "vibration": 0.065,
-    "ambient_humidity": 0.0532
+    "health_score": 0.2555,
+    "current": 0.18,
+    "rpm_reduction_percent": 0.1627,
+    "rpm_actual": 0.1399,
+    "estimated_temperature": 0.1095,
+    "vibration": 0.0655,
+    "ambient_temperature": 0.057,
+    "ambient_humidity": 0.0299
   }
 }

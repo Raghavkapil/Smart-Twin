@@ -3,11 +3,25 @@ import axios from "axios";
 import {
   FaHistory, FaDownload, FaSearch, FaFilter, FaChevronLeft,
   FaChevronRight, FaHeartbeat, FaExclamationTriangle, FaCheckCircle,
-  FaSyncAlt, FaDatabase,
+  FaSyncAlt, FaDatabase, FaSort, FaSortUp, FaSortDown,
 } from "react-icons/fa";
 import Navbar from "../components/Navbar";
 
 const PAGE_SIZE = 25;
+
+// Maps display header → CSV field key (null = not sortable)
+const COLUMNS = [
+  { label: "Timestamp",       key: "timestamp"            },
+  { label: "RPM",             key: "rpm_actual"           },
+  { label: "Current (A)",     key: "current"              },
+  { label: "Amb. Temp (°C)",  key: "ambient_temperature"  },
+  { label: "Motor Temp (°C)", key: "estimated_temperature"},
+  { label: "Humidity (%)",    key: "ambient_humidity"     },
+  { label: "Vibration (g)",   key: "vibration"            },
+  { label: "Health %",        key: "health_score"         },
+  { label: "Fault Type",      key: "fault_type"           },
+  { label: "Maint.",          key: null                   },
+];
 
 const FAULT_COLORS = {
   Normal:           "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
@@ -40,6 +54,19 @@ function History() {
   const [search, setSearch]     = useState("");
   const [faultFilter, setFault] = useState("All");
   const [page, setPage]         = useState(1);
+  const [sortCol, setSortCol]   = useState(null);   // field key or null
+  const [sortDir, setSortDir]   = useState("asc");  // "asc" | "desc"
+
+  const handleSort = (key) => {
+    if (!key) return;
+    if (sortCol === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortCol(key);
+      setSortDir("asc");
+    }
+    setPage(1);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -61,14 +88,30 @@ function History() {
   useEffect(() => { setPage(1); }, [search, faultFilter]);
 
   const filtered = useMemo(() => {
-    return rows.filter((r) => {
+    const base = rows.filter((r) => {
       const matchFault  = faultFilter === "All" || r.fault_type === faultFilter;
       const matchSearch = search === "" ||
         r.timestamp?.toLowerCase().includes(search.toLowerCase()) ||
         r.fault_type?.toLowerCase().includes(search.toLowerCase());
       return matchFault && matchSearch;
     });
-  }, [rows, faultFilter, search]);
+
+    if (!sortCol) return base;
+
+    return [...base].sort((a, b) => {
+      const av = a[sortCol] ?? "";
+      const bv = b[sortCol] ?? "";
+      const an = parseFloat(av);
+      const bn = parseFloat(bv);
+      let cmp;
+      if (!isNaN(an) && !isNaN(bn)) {
+        cmp = an - bn;
+      } else {
+        cmp = String(av).localeCompare(String(bv));
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [rows, faultFilter, search, sortCol, sortDir]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows   = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -221,12 +264,26 @@ function History() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-800 text-slate-500 text-xs uppercase tracking-wider">
-                    {[
-                      "Timestamp", "RPM", "Current (A)", "Amb. Temp (°C)",
-                      "Motor Temp (°C)", "Humidity (%)", "Vibration (g)",
-                      "Health %", "Fault Type", "Maint.",
-                    ].map((h) => (
-                      <th key={h} className="px-4 py-3 text-left font-semibold whitespace-nowrap">{h}</th>
+                    {COLUMNS.map(({ label, key }) => (
+                      <th
+                        key={label}
+                        onClick={() => handleSort(key)}
+                        className={`px-4 py-3 text-left font-semibold whitespace-nowrap select-none
+                          ${key ? "cursor-pointer hover:text-slate-300 transition-colors" : ""}`}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          {label}
+                          {key && (
+                            sortCol === key ? (
+                              sortDir === "asc"
+                                ? <FaSortUp   className="text-blue-400" />
+                                : <FaSortDown className="text-blue-400" />
+                            ) : (
+                              <FaSort className="text-slate-700" />
+                            )
+                          )}
+                        </span>
+                      </th>
                     ))}
                   </tr>
                 </thead>

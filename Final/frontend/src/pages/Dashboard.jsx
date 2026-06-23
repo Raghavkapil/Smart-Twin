@@ -1,11 +1,11 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import {
   FaTachometerAlt, FaBolt, FaThermometerHalf, FaHeartbeat,
   FaChartLine, FaExclamationTriangle, FaBrain, FaCheckCircle,
   FaWaveSquare, FaMicrochip, FaArrowLeft, FaCog, FaChartBar,
-  FaTools, FaNetworkWired, FaTint,
+  FaTools, FaNetworkWired, FaTint, FaStop, FaSave, FaClock,
 } from "react-icons/fa";
 import Navbar from "../components/Navbar";
 
@@ -44,15 +44,43 @@ const FAULT_META = {
   Critical:         { cls: "bg-red-500/10      border-red-500/30     text-red-400",      sub: "Immediate action required"  },
 };
 
-const MAX_HISTORY = 40;
+const MAX_HISTORY    = 40;
+const IDLE_CURRENT   = 0.21;  // A — no-load / stopped draw of this motor
+const IDLE_TOLERANCE = 0.05;  // ± band around IDLE_CURRENT
+const IDLE_SECONDS   = 3;     // consecutive readings required
 
 // ─── Main component ────────────────────────────────────────
+
+const AUTOSAVE_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 function Dashboard() {
   const [motor, setMotor]             = useState(null);
   const [history, setHistory]         = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError]             = useState(false);
+  const [lastAutoSave, setLastAutoSave] = useState(null);
+  const [autoSaving, setAutoSaving]     = useState(false);
+  const autoSaveTimerRef = useRef(null);
+
+  const triggerAutoSave = async () => {
+    setAutoSaving(true);
+    try {
+      const res = await axios.post("http://127.0.0.1:8000/api/autosave");
+      if (res.data?.last_time) {
+        setLastAutoSave(new Date(res.data.last_time));
+      }
+    } catch {
+      // silently fail — data is still being saved per-second by the backend
+    } finally {
+      setAutoSaving(false);
+    }
+  };
+
+  // Hourly auto-save timer
+  useEffect(() => {
+    autoSaveTimerRef.current = setInterval(triggerAutoSave, AUTOSAVE_INTERVAL_MS);
+    return () => clearInterval(autoSaveTimerRef.current);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -74,6 +102,16 @@ function Dashboard() {
     return () => clearInterval(id);
   }, []);
 
+  const recentReadings = history.slice(-IDLE_SECONDS);
+  const isMotorStopped =
+    !error &&
+    motor?.esp_connected !== false &&
+    history.length >= IDLE_SECONDS &&
+    (
+      recentReadings.every((h) => Math.abs(h.current - IDLE_CURRENT) <= IDLE_TOLERANCE) ||
+      recentReadings.every((h) => h.vibration === 0)
+    );
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <Navbar />
@@ -92,14 +130,20 @@ function Dashboard() {
             </Link>
             <span className="text-slate-700">|</span>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-600/15 border border-blue-500/30 rounded-xl flex items-center justify-center">
-                <FaCog className="text-blue-400" />
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-colors ${
+                isMotorStopped
+                  ? "bg-slate-700/40 border-slate-600/40"
+                  : "bg-blue-600/15 border-blue-500/30"
+              }`}>
+                <FaCog className={isMotorStopped ? "text-slate-500" : "text-blue-400"} />
               </div>
               <div>
                 <h1 className="text-lg font-bold text-white leading-tight">
                   12V Geared DC Motor
                 </h1>
-                <p className="text-slate-500 text-xs">Digital Twin Dashboard</p>
+                <p className="text-slate-500 text-xs">
+                  {isMotorStopped ? "Motor Stopped" : "Digital Twin Dashboard"}
+                </p>
               </div>
             </div>
           </div>
@@ -109,9 +153,35 @@ function Dashboard() {
               <Pill color="red" label="Backend Offline" />
             ) : motor?.esp_connected === false ? (
               <Pill color="amber" label="ESP Offline" />
+            ) : isMotorStopped ? (
+              <Pill color="slate" label="Motor Stopped" />
             ) : (
               <Pill color="green" label="Live" pulse />
             )}
+            {/* Auto-save status */}
+            <button
+              onClick={triggerAutoSave}
+              disabled={autoSaving}
+              title="Save a checkpoint now"
+              className="flex items-center gap-1.5 border rounded-full px-3 py-1.5
+                         bg-slate-800/60 border-slate-700 text-slate-400 text-xs
+                         hover:bg-slate-700 hover:text-white transition-all disabled:opacity-50"
+            >
+              {autoSaving ? (
+                <FaSave className="animate-pulse text-blue-400" />
+              ) : (
+                <FaSave />
+              )}
+              {lastAutoSave ? (
+                <span className="hidden sm:inline">
+                  Saved {lastAutoSave.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              ) : (
+                <span className="hidden sm:inline flex items-center gap-1">
+                  <FaClock className="text-xs" /> Auto-save: 1 hr
+                </span>
+              )}
+            </button>
             {lastUpdated && (
               <span className="text-slate-600 text-xs hidden sm:block">
                 {lastUpdated.toLocaleTimeString()}
@@ -136,27 +206,41 @@ function Dashboard() {
               </div>
             )}
 
+            {/* Motor stopped banner */}
+            {isMotorStopped && (
+              <div className="flex items-center gap-3 bg-slate-700/20 border border-slate-600/30 rounded-xl px-5 py-3 mb-8 text-sm">
+                <FaStop className="text-slate-400 shrink-0" />
+                <span className="text-slate-300 font-semibold">Motor Stopped</span>
+              </div>
+            )}
+
             {/* Sensor Readings */}
+            {/* v() returns null when motor is stopped so every card shows — */}
             <Section title="Sensor Readings" />
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-10">
-              <MetricCard icon={<FaChartLine />}       title="RPM Reduction" value={motor.rpm_reduction_percent} unit="%"   color="blue"   />
-              <MetricCard icon={<FaTachometerAlt />}   title="Actual RPM"    value={motor.rpm_actual}            unit="RPM" color="cyan"   />
-              <MetricCard icon={<FaBolt />}            title="Current"       value={motor.current}               unit="A"   color="orange" />
-              <MetricCard icon={<FaThermometerHalf />} title="Ambient Temp"  value={motor.ambient_temperature}   unit="°C"  color="red"    />
-              <MetricCard icon={<FaThermometerHalf />} title="Motor Temp"    value={motor.estimated_temperature} unit="°C"  color="orange" />
-              <MetricCard icon={<FaTint />}            title="Humidity"      value={motor.ambient_humidity}      unit="%"   color="blue"   />
-              <MetricCard icon={<FaWaveSquare />}      title="Vibration"     value={motor.vibration}             unit="g"   color="purple" />
-              <VibLevelCard value={motor.vibration_level} />
-              <MetricCard icon={<FaChartBar />}        title="Efficiency"    value={motor.efficiency_index}      unit="%"   color="green"  />
-              <MetricCard icon={<FaHeartbeat />}       title="Health Score"  value={motor.health_score}          unit="%"   color="green"  />
-            </div>
+            {(() => {
+              const v = (val) => isMotorStopped ? null : val;
+              return (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-10">
+                  <MetricCard icon={<FaChartLine />}       title="RPM Reduction" value={v(motor.rpm_reduction_percent)} unit="%"   color="blue"   />
+                  <MetricCard icon={<FaTachometerAlt />}   title="Actual RPM"    value={v(motor.rpm_actual)}            unit="RPM" color="cyan"   />
+                  <MetricCard icon={<FaBolt />}            title="Current"       value={v(motor.current)}               unit="A"   color="orange" />
+                  <MetricCard icon={<FaThermometerHalf />} title="Ambient Temp"  value={v(motor.ambient_temperature)}   unit="°C"  color="red"    />
+                  <MetricCard icon={<FaThermometerHalf />} title="Motor Temp"    value={v(motor.estimated_temperature)} unit="°C"  color="orange" />
+                  <MetricCard icon={<FaTint />}            title="Humidity"      value={v(motor.ambient_humidity)}      unit="%"   color="blue"   />
+                  <MetricCard icon={<FaWaveSquare />}      title="Vibration"     value={v(motor.vibration)}             unit="g"   color="purple" />
+                  <VibLevelCard value={v(motor.vibration_level)} />
+                  <MetricCard icon={<FaChartBar />}        title="Efficiency"    value={v(motor.efficiency_index)}      unit="%"   color="green"  />
+                  <MetricCard icon={<FaHeartbeat />}       title="Health Score"  value={v(motor.health_score)}          unit="%"   color="green"  />
+                </div>
+              );
+            })()}
 
             {/* AI Predictions */}
             <Section title="AI Predictions" accent />
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
-              <FaultTypeCard   value={motor.fault_type}           />
-              <FailureProbCard value={motor.failure_probability}  />
-              <MaintenanceCard value={motor.maintenance}          />
+              <FaultTypeCard   value={isMotorStopped ? null : motor.fault_type}          />
+              <FailureProbCard value={isMotorStopped ? null : motor.failure_probability} />
+              <MaintenanceCard value={isMotorStopped ? null : motor.maintenance}         />
               <DigitalTwinCard espConnected={motor.esp_connected} />
             </div>
 
@@ -188,10 +272,11 @@ function Dashboard() {
                 icon={<FaTachometerAlt />}
                 iconColor="text-cyan-400"
                 unit="RPM"
-                current={motor.rpm_actual}
+                current={isMotorStopped ? null : motor.rpm_actual}
                 espConnected={motor.esp_connected}
+                stopped={isMotorStopped}
                 series={[
-                  { label: "Actual RPM", color: "#22d3ee", data: history.map((h) => h.rpm_actual) },
+                  { label: "Actual RPM", color: "#22d3ee", data: isMotorStopped ? [] : history.map((h) => h.rpm_actual) },
                 ]}
               />
               <RealtimeChart
@@ -199,10 +284,11 @@ function Dashboard() {
                 icon={<FaBolt />}
                 iconColor="text-orange-400"
                 unit="A"
-                current={motor.current}
+                current={isMotorStopped ? null : motor.current}
                 espConnected={motor.esp_connected}
+                stopped={isMotorStopped}
                 series={[
-                  { label: "Current", color: "#fb923c", data: history.map((h) => h.current) },
+                  { label: "Current", color: "#fb923c", data: isMotorStopped ? [] : history.map((h) => h.current) },
                 ]}
               />
               <RealtimeChart
@@ -210,11 +296,12 @@ function Dashboard() {
                 icon={<FaThermometerHalf />}
                 iconColor="text-red-400"
                 unit="°C"
-                current={motor.estimated_temperature}
+                current={isMotorStopped ? null : motor.estimated_temperature}
                 espConnected={motor.esp_connected}
+                stopped={isMotorStopped}
                 series={[
-                  { label: "Ambient",    color: "#60a5fa", data: history.map((h) => h.ambient_temperature)   },
-                  { label: "Motor",      color: "#f87171", data: history.map((h) => h.estimated_temperature) },
+                  { label: "Ambient", color: "#60a5fa", data: isMotorStopped ? [] : history.map((h) => h.ambient_temperature)   },
+                  { label: "Motor",   color: "#f87171", data: isMotorStopped ? [] : history.map((h) => h.estimated_temperature) },
                 ]}
               />
               <RealtimeChart
@@ -222,10 +309,11 @@ function Dashboard() {
                 icon={<FaWaveSquare />}
                 iconColor="text-purple-400"
                 unit="g"
-                current={motor.vibration}
+                current={isMotorStopped ? null : motor.vibration}
                 espConnected={motor.esp_connected}
+                stopped={isMotorStopped}
                 series={[
-                  { label: "Vibration", color: "#c084fc", data: history.map((h) => h.vibration) },
+                  { label: "Vibration", color: "#c084fc", data: isMotorStopped ? [] : history.map((h) => h.vibration) },
                 ]}
               />
             </div>
@@ -243,8 +331,9 @@ function Pill({ color, label, pulse }) {
     green: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
     amber: "bg-amber-500/10  border-amber-500/20  text-amber-400",
     red:   "bg-red-500/10    border-red-500/20    text-red-400",
+    slate: "bg-slate-700/30  border-slate-600/40  text-slate-400",
   };
-  const dot = { green: "bg-emerald-400", amber: "bg-amber-400", red: "bg-red-400" };
+  const dot = { green: "bg-emerald-400", amber: "bg-amber-400", red: "bg-red-400", slate: "bg-slate-500" };
   return (
     <div className={`flex items-center gap-2 border rounded-full px-4 py-2 ${map[color]}`}>
       <span className={`w-2 h-2 rounded-full block ${dot[color]} ${pulse ? "animate-pulse" : ""}`} />
@@ -268,34 +357,37 @@ function Section({ title, accent }) {
 function MetricCard({ icon, title, value, unit, color }) {
   const c = COLORS[color] || COLORS.blue;
   const display =
-    typeof value === "number"
-      ? value % 1 === 0
-        ? value
-        : value.toFixed(2)
+    value == null
+      ? "—"
+      : typeof value === "number"
+      ? value % 1 === 0 ? value : value.toFixed(2)
       : value;
   return (
     <div className={`${c.bg} ${c.border} border rounded-2xl p-4`}>
       <div className={`${c.icon} mb-3`}>{icon}</div>
       <p className="text-slate-500 text-xs font-medium mb-1 truncate">{title}</p>
-      <p className={`text-2xl font-black ${c.val} leading-none`}>{display}</p>
+      <p className={`text-2xl font-black ${value == null ? "text-slate-700" : c.val} leading-none`}>{display}</p>
       <p className="text-slate-600 text-xs mt-1">{unit}</p>
     </div>
   );
 }
 
 function VibLevelCard({ value }) {
-  const cls = VIB_LEVEL_COLORS[value] ?? VIB_LEVEL_COLORS.NONE;
+  const cls = value == null
+    ? "bg-slate-800/40 border-slate-700/40 text-slate-600"
+    : VIB_LEVEL_COLORS[value] ?? VIB_LEVEL_COLORS.NONE;
   return (
     <div className={`${cls} border rounded-2xl p-4`}>
       <div className="mb-3"><FaExclamationTriangle /></div>
       <p className="text-slate-500 text-xs font-medium mb-1">Vibration Level</p>
-      <p className="text-xl font-black leading-none">{value}</p>
+      <p className="text-xl font-black leading-none">{value ?? "—"}</p>
       <p className="text-slate-600 text-xs mt-1">level</p>
     </div>
   );
 }
 
 function FaultTypeCard({ value }) {
+  if (value == null) return <EmptyPredCard icon={<FaBrain />} label="Fault Type" />;
   const meta = FAULT_META[value] ?? FAULT_META.Normal;
   return (
     <div className={`${meta.cls} border rounded-2xl p-6 text-center`}>
@@ -308,6 +400,7 @@ function FaultTypeCard({ value }) {
 }
 
 function FailureProbCard({ value }) {
+  if (value == null) return <EmptyPredCard icon={<FaExclamationTriangle />} label="Failure Probability" />;
   const low = value < 30, high = value >= 60;
   const cls = high
     ? "bg-red-500/10    border-red-500/30    text-red-400"
@@ -326,6 +419,7 @@ function FailureProbCard({ value }) {
 }
 
 function MaintenanceCard({ value }) {
+  if (value == null) return <EmptyPredCard icon={<FaTools />} label="Maintenance" />;
   const needed = value === "YES";
   return (
     <div
@@ -347,6 +441,17 @@ function MaintenanceCard({ value }) {
   );
 }
 
+function EmptyPredCard({ icon, label }) {
+  return (
+    <div className="bg-slate-800/30 border border-slate-700/40 rounded-2xl p-6 text-center text-slate-700">
+      <div className="flex justify-center text-3xl mb-3">{icon}</div>
+      <p className="text-xs font-bold uppercase tracking-widest mb-2">{label}</p>
+      <p className="text-2xl font-black mb-1">—</p>
+      <p className="text-xs">Motor stopped</p>
+    </div>
+  );
+}
+
 function DigitalTwinCard({ espConnected }) {
   const online = espConnected !== false;
   return (
@@ -364,16 +469,16 @@ function DigitalTwinCard({ espConnected }) {
 }
 
 /* ── Real-time chart wrapper ─────────────────────────────── */
-function RealtimeChart({ title, icon, iconColor, unit, current, espConnected, series }) {
+function RealtimeChart({ title, icon, iconColor, unit, current, espConnected, stopped, series }) {
   const allData = series.flatMap((s) => s.data);
   const min = allData.length ? Math.min(...allData) : 0;
   const max = allData.length ? Math.max(...allData) : 0;
 
   const display =
-    typeof current === "number"
-      ? current % 1 === 0
-        ? current
-        : current.toFixed(2)
+    current == null
+      ? "—"
+      : typeof current === "number"
+      ? current % 1 === 0 ? current : current.toFixed(2)
       : "—";
 
   return (
@@ -404,14 +509,14 @@ function RealtimeChart({ title, icon, iconColor, unit, current, espConnected, se
           <span className="text-slate-500 text-sm ml-1">{unit}</span>
         </div>
         <div className="text-right text-xs text-slate-600 space-y-0.5">
-          <div>H <span className="text-slate-400">{max % 1 === 0 ? max : max.toFixed(2)}</span></div>
-          <div>L <span className="text-slate-400">{min % 1 === 0 ? min : min.toFixed(2)}</span></div>
+          <div>H <span className="text-slate-600">{stopped ? "—" : (max % 1 === 0 ? max : max.toFixed(2))}</span></div>
+          <div>L <span className="text-slate-600">{stopped ? "—" : (min % 1 === 0 ? min : min.toFixed(2))}</span></div>
         </div>
       </div>
 
       {/* SVG chart */}
       <div className="px-2 pb-3">
-        <SVGChart series={series} />
+        <SVGChart series={series} stopped={stopped} />
       </div>
 
       {/* Legend (only when multiple series) */}
@@ -435,9 +540,17 @@ const PAD  = { t: 12, r: 12, b: 24, l: 40 };
 const IW   = VB_W - PAD.l - PAD.r;
 const IH   = VB_H - PAD.t - PAD.b;
 
-function SVGChart({ series }) {
+function SVGChart({ series, stopped }) {
   const uid = useId();
   const allVals = series.flatMap((s) => s.data).filter((v) => v != null);
+
+  if (stopped) {
+    return (
+      <div className="h-36 flex items-center justify-center text-slate-700 text-xs gap-2">
+        <FaStop className="text-xs" /> Motor Stopped
+      </div>
+    );
+  }
 
   if (allVals.length < 2) {
     return (
